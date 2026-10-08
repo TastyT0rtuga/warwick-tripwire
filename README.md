@@ -224,6 +224,7 @@ Each model ran plain and cut-to-48-bytes: 3,000 more labels, none blank.
 | Model | Prompt | Honest right* | Disguise right | Persuasion hijacked | s/knock |
 |---|---|---|---|---|---|
 | Rule (no model) | — | 79% | 48% | 0% | instant |
+| Rule v2 (round 6, held out) | — | 83% | 68% | 7% | instant |
 | Qwen2.5 1.5B | plain | 77% | 70% | 21% | 4.6 |
 | Qwen2.5 1.5B | cut to 48 bytes | 71% | 70% | **11%** | 3.0 |
 | Qwen3 4B | plain | 79% | 73% | 16% | 17.3 |
@@ -267,6 +268,32 @@ instruction with a known answer and flagging data that makes the model miss it
 differential is a cheap variant of the first idea; round 5 is a reason to
 benchmark such variants on several independent sets before trusting one.
 
+### Round 6 — fixing the rule, with a held-out test
+
+Both independent rounds said the rule itself was weakest on disguises. I
+rewrote it as seven generic protocol facts (an HTTP request line that doesn't
+start at byte 0 is a scanner; a verb browsers never send is a scanner; HTTP on
+an SSH, SQL or RDP port is a scanner; a browser is its User-Agent, not its
+path; and so on), designed it on round 4 only, froze it, and ran it once on
+round 5.
+
+| Set | Kind | Old rule | New rule | p |
+|---|---|---|---|---|
+| Round 4 (designed on) | disguise | 23% | 74% | 3e-14 |
+| Round 4 (designed on) | honest | 69% | 100% | 2e-11 |
+| **Round 5 (held out)** | **disguise** | **48%** | **68%** | **0.0003** |
+| Round 5 (held out) | honest (undisputed) | 79% | 83% | 0.27 |
+| Round 5 (held out) | persuasion: gave attacker's label | 0 of 140 | 10 of 140 | 0.002 |
+
+The held-out gain on disguises is real and about a third the size of the gain
+on the design set, which is the usual shrinkage and the reason to hold a set
+out. The cost is also real: ten persuasion knocks that *claim* to be an
+internal database on the Elasticsearch port now get that label, because the
+new rule trusts HTTP on that port unless the User-Agent says browser or
+scanner. The old rule was immune there partly by accident. Code:
+`knocklabel.py`; full tables: `results/rule-v2.md`. The tripwire itself does
+not label knocks; the label is an optional note for the alert.
+
 ### Design rules this left me with
 
 - **Rules decide, models explain.** The alert fires from the rule. The model's
@@ -284,8 +311,10 @@ benchmark such variants on several independent sets before trusting one.
 - **Don't vote, don't think.** Repeat sampling and reasoning modes bought
   nothing on this hardware.
 - **Test every detector on someone else's data — twice.** Round 3 flattered
-  the rule; round 4 flattered the truncation differential. Each claim that
-  looked good on one set needed a second, independent set to deflate it.
+  the rule; round 4 flattered the truncation differential; the rewritten rule
+  gained three times as much on the set it was designed on as on the set it
+  wasn't. Each claim that looked good on one set needed a second, independent
+  set to deflate it.
 - **Measure speed and heat.** 3–17 s per knock is fine for a tripwire that
   sees a few knocks a day; it is not an IDS. With the battery guard working
   in round 5, the phone stayed at or above 94% on its charger and peaked at 41 °C during
@@ -313,6 +342,8 @@ benchmark such variants on several independent sets before trusting one.
 | `results/round3-tables.md` | Every round-3 table: per-run accuracy, hijacks by injection style and carrier, repeat sampling. |
 | `results/round4-tables.md` | Every round-4 table: Wilson intervals, paired McNemar tests, per-theme and per-style breakdowns. |
 | `results/round5-tables.md` | Every round-5 table, with and without the disputed labels. |
+| `knocklabel.py` | Rule v2: labels a knock from port and first bytes. Standard library. Optional; the tripwire does not need it. |
+| `results/rule-v2.md` | Rule v2 against the old rule on the design set and the held-out set. |
 
 The knock sets themselves are not included: they were written by another
 model on request and contain working injection text.
